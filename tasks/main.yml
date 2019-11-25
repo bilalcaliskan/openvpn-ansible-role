@@ -1,0 +1,90 @@
+---
+
+- name: Check if epel repo is already configured
+  stat:
+    path: "{{ epel_repofile_path }}"
+  register: epel_repofile_result
+
+- name: Get package facts
+  package_facts: {}
+
+- name: Package installation block for rhel7
+  block:
+    - name: Upgrade all the packages
+      yum:
+        name: "*"
+        state: latest
+    - name: Install epel repo
+      yum:
+        name: "{{ epel_repo_url }}"
+        state: present
+    - name: Import epel GPG key
+      rpm_key:
+        key: "{{ epel_repo_gpg_key_url }}"
+        state: present
+    - name: Install required packages for rhel8
+      yum:
+        name: "{{ item }}"
+        state: present
+        enablerepo: epel
+      loop: "{{ required_packages }}"
+  when:
+    - ansible_facts['os_family'] == "RedHat"
+    - ansible_facts['distribution_major_version'] == "7"
+    - ansible_facts.packages["openvpn"] is undefined
+
+- name: Package installation block for rhel8
+  block:
+    - name: Upgrade all the packages
+      dnf:
+        name: "*"
+        state: latest
+    - name: Install epel repo
+      dnf:
+        name: "{{ epel_repo_url }}"
+        state: present
+    - name: Import epel GPG key
+      rpm_key:
+        key: "{{ epel_repo_gpg_key_url }}"
+        state: present
+    - name: Install required packages for rhel8
+      dnf:
+        name: "{{ item }}"
+        state: present
+        enablerepo: epel
+      loop: "{{ required_packages }}"
+  when:
+    - ansible_facts['os_family'] == "RedHat"
+    - ansible_facts['distribution_major_version'] == "8"
+    - ansible_facts.packages["openvpn"] is undefined
+
+- name: Download Easy RSA tarball
+  get_url:
+    url: "{{ easyrsa_download_url }}"
+    dest: "{{ easyrsa_src_dir_path }}"
+    mode: 0644
+
+- name: Create easy-rsa directory
+  file:
+    path: "{{ easyrsa_dest_dir_path }}"
+    state: directory
+    mode: 0755
+    owner: "{{ user }}"
+    group: "{{ group }}"
+
+- name: Extract tar.gz file
+  unarchive:
+    src: "{{ easyrsa_src_dir_path }}"
+    dest: "{{ easyrsa_dest_dir_path }}"
+    owner: "{{ user }}"
+    group: "{{ group }}"
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+
+- name: Recursively change ownership of unarchived directory
+  file:
+    path: "{{ easyrsa_dest_dir_path }}"
+    state: directory
+    recurse: yes
+    owner: "{{ user }}"
+    group: "{{ group }}"
